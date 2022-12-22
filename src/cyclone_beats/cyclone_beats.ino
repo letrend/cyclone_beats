@@ -2,65 +2,57 @@
 #include "ClosedCube_TCA9546A.h"
 #include <Dps310.h>
 #include <Adafruit_NeoPixel.h>
+#include <Control_Surface.h> // Include the Control Surface library
 #define LED_PIN        13
 #define PIN            8
 #define NUMPIXELS      8
 #define DEADBAND 15
 #define SENSITIVITY 0.8
 #define PIXEL(sensor) (7-sensor)
-#define KNOB_CLK 2
+#define KNOB_CLK 4
 #define KNOB_DT 3
-#define KNOB_SW 4
+#define KNOB_SW 2
 #define SW_0 9
 #define SW_1 10
 
-// When we setup the NeoPixel library, we tell it how many pixels, and which pin to use to send signals.
-// Note that for older NeoPixel strips you might need to change the third parameter--see the strandtest
-// example for more information on possible values.
+USBMIDI_Interface midi;
+//USBDebugMIDI_Interface midi{115200};
+
+// Instantiate a NoteButton object
+NoteButton button {
+  KNOB_SW,                       // Push button on pin 5
+  {MIDI_Notes::C(4), CHANNEL_1}, // Note C4 on MIDI channel 1
+};
+
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, PIN, NEO_RGBW + NEO_KHZ800);
 
 ClosedCube_TCA9546A tca9546a;
 
 Dps310 sensors[8];
-int32_t pressure_mean[8];
+float pressure_mean[8] = {0};
 int8_t oversampling = 0;
 
-int32_t measure(int sensor){
-  float pressure;
+//uint8_t pressure_count = 0, temperature_count = 0;
+//float pressure[32], temperature[32];
 
+float measure(int sensor){
   int channel = sensor/2;
   tca9546a.selectChannel(channel);
-
-//  Serial.print("Measurement sensor ");
-//  Serial.println(sensor);
-  
-  int ret = sensors[sensor].measurePressureOnce(pressure);
-
-  if (ret != 0)
-  {
-//    Serial.println();
-//    Serial.println();
-//    Serial.print("FAIL! ret = ");
-//    Serial.println(ret);
-    return 0;
-  }
-  else
-  {
-//    Serial.print(temperature);
-//    Serial.println(" degrees of Celsius");
-//    Serial.print(pressure);
-//    Serial.println(" Pascal");
-    return pressure;
-  }
+  float pressure;
+  int ret = sensors[sensor].measurePressureOnce(pressure,0);
+//  int16_t ret = sensors[sensor].getContResults(&temperature[0], pressure_count, &pressure[0], temperature_count);
+//  if(sensor==0){
+//    Serial.println(pressure_count);
+//    Serial.println(pressure[0]);
+//  }
+  return pressure;
 }
 
 void setup()
 {
-	Serial.begin(9600);
-	Serial.println("ClosedCube TCA9546 Arduino Test");
-
-	// I2C address is 0x77
-	tca9546a.begin(0x70);
+  Serial.begin(115200);
+	
+	tca9546a.begin(0x71);
  
   float pressure;
 
@@ -68,32 +60,28 @@ void setup()
   for(int i=0;i<4;i++){
     tca9546a.selectChannel(i);
     sensors[j].begin(Wire, 0x76);
-    sensors[j].correctTemp();
-    int ret = sensors[j].measurePressureOnce(pressure);
+//    int16_t ret = sensors[j].startMeasurePressureOnce(prs_mr, prs_osr);
+    int ret = sensors[j].measurePressureOnce(pressure,0);
     Serial.print("sensor \t");
     Serial.print(j);
     if (ret != 0){
       Serial.print("\tInit FAILED! ret = ");
       Serial.println(ret);
     }else{
-      Serial.print("\tInit complete!\t");
-      Serial.print(pressure);
-      Serial.println(" Pascal");
+      Serial.println("\tInit complete!\t");
     }
 
     j++;
     sensors[j].begin(Wire, 0x77);
-    sensors[j].correctTemp();
-    ret = sensors[j].measurePressureOnce(pressure);
+//    ret = sensors[j].startMeasurePressureCont(prs_mr, prs_osr);
+    ret = sensors[j].measurePressureOnce(pressure,0);
     Serial.print("sensor \t");
     Serial.print(j);
     if (ret != 0){
       Serial.print("\tInit FAILED! ret = ");
       Serial.println(ret);
     }else{
-      Serial.print("\tInit complete!\t");
-      Serial.print(pressure);
-      Serial.println(" Pascal");
+      Serial.println("\tInit complete!\t");
     }
     j++;
   }
@@ -102,38 +90,34 @@ void setup()
 
   pinMode(LED_PIN, OUTPUT);
   
-  for(int sensor = 0; sensor<8; sensor++){
-    pressure_mean[sensor] = measure(sensor);
-  }
-  // intialize mean for 5 seconds
+  // intialize mean for a few seconds
   unsigned long t0 = millis(), t1;
-//  for(int sensor = 0; sensor<8; sensor++){
-//    pixels.setPixelColor(PIXEL(sensor), pixels.Color(255,255,255,255));
-//  }
-//  pixels.show();
-//  while(true){
-//    
-//  }
+  int samples = 0;
   do{
     t1 = millis();
     for(int sensor = 0; sensor<8; sensor++){
-      int32_t pressure = measure(sensor);
-      pressure_mean[sensor] = 0.5*pressure_mean[sensor] + 0.5*pressure;
+      float pressure = measure(sensor);
+      pressure_mean[sensor] += pressure;
       double counter = (t1-t0)/3000.0;
       pixels.setPixelColor(PIXEL(sensor), pixels.Color((255-(1.0-counter)*255),0,0,0));
     }
     pixels.show();
     delay(1);
+    samples++;
   }while((t1-t0)<3000);
+  for(int sensor = 0; sensor<8; sensor++){
+    pressure_mean[sensor] /= (float)samples;
+    Serial.println(pressure_mean[sensor]);
+  }
+  delay(500);
+  Control_Surface.begin(); // Initialize Control Surface
 }
 
 void loop()
 {
-  digitalWrite(LED_PIN, HIGH);
 	for(int sensor = 0; sensor<8; sensor++){
-    int32_t pressure = measure(sensor);
-    pressure_mean[sensor] = 0.99*pressure_mean[sensor] + 0.01*pressure;
-    int32_t diff = pressure - pressure_mean[sensor];
+    float pressure = measure(sensor);
+    float diff = pressure - pressure_mean[sensor];
     if(diff < -SENSITIVITY){
       uint8_t white = min((-diff-DEADBAND)*SENSITIVITY,255);
       pixels.setPixelColor(PIXEL(sensor), pixels.Color(0,0,0,white));
@@ -149,7 +133,6 @@ void loop()
 //    Serial.println(diff); 
     
 	}
- pixels.show(); // This sends the updated pixel color to the hardware.
-// delay(10);
- digitalWrite(LED_PIN, LOW);
+  pixels.show(); // This sends the updated pixel color to the hardware.
+  Control_Surface.loop(); // Update the Control Surface
 }
