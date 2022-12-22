@@ -6,8 +6,8 @@
 #define LED_PIN        13
 #define PIN            8
 #define NUMPIXELS      8
-#define DEADBAND 15
-#define SENSITIVITY 0.8
+#define DEADBAND 0
+#define SENSITIVITY 0.01
 #define PIXEL(sensor) (7-sensor)
 #define KNOB_CLK 4
 #define KNOB_DT 3
@@ -61,6 +61,7 @@ void setup()
     tca9546a.selectChannel(i);
     sensors[j].begin(Wire, 0x76);
 //    int16_t ret = sensors[j].startMeasurePressureOnce(prs_mr, prs_osr);
+    sensors[j].correctTemp();
     int ret = sensors[j].measurePressureOnce(pressure,0);
     Serial.print("sensor \t");
     Serial.print(j);
@@ -74,6 +75,7 @@ void setup()
     j++;
     sensors[j].begin(Wire, 0x77);
 //    ret = sensors[j].startMeasurePressureCont(prs_mr, prs_osr);
+    sensors[j].correctTemp();
     ret = sensors[j].measurePressureOnce(pressure,0);
     Serial.print("sensor \t");
     Serial.print(j);
@@ -102,7 +104,7 @@ void setup()
       pixels.setPixelColor(PIXEL(sensor), pixels.Color((255-(1.0-counter)*255),0,0,0));
     }
     pixels.show();
-    delay(1);
+    delay(10);
     samples++;
   }while((t1-t0)<3000);
   for(int sensor = 0; sensor<8; sensor++){
@@ -118,10 +120,10 @@ void loop()
 	for(int sensor = 0; sensor<8; sensor++){
     float pressure = measure(sensor);
     float diff = pressure - pressure_mean[sensor];
-    if(diff < -SENSITIVITY){
+    if(diff < -DEADBAND){
       uint8_t white = min((-diff-DEADBAND)*SENSITIVITY,255);
       pixels.setPixelColor(PIXEL(sensor), pixels.Color(0,0,0,white));
-    }else if(diff>=-SENSITIVITY && diff<=DEADBAND) {
+    }else if(diff>=-DEADBAND && diff<=DEADBAND) {
       pixels.setPixelColor(PIXEL(sensor), pixels.Color(0,0,0,0));
     }else{
       uint8_t blue = min((diff-DEADBAND)*SENSITIVITY,255);
