@@ -15,7 +15,7 @@
 #define PIN            8
 #define NUMPIXELS      8
 #define DEADBAND 0
-#define SENSITIVITY 0.01
+#define SENSITIVITY 1
 #define PIXEL(sensor) (7-sensor)
 #define KNOB_CLK 4
 #define KNOB_DT 3
@@ -110,17 +110,18 @@ float measure(int sensor){
   int ret = sensors[sensor].measurePressureOnce(pressure,0);
 //  int16_t ret = sensors[sensor].getContResults(&temperature[0], pressure_count, &pressure[0], temperature_count);
 //  if(sensor==0){
-//    Serial.println(pressure_count);
-//    Serial.println(pressure[0]);
+//    SerialUSB.println(pressure_count);
+//    SerialUSB.println(pressure[0]);
 //  }
   return pressure;
 }
 
 void setup()
 {
-  Serial.begin(115200);
+  SerialUSB.begin(115200);
+  SerialUSB.println("hello");
 	
-	tca9546a.begin(0x71);
+	tca9546a.begin(0x70);
 
   int j = 0;
   for(int i=0;i<4;i++){
@@ -129,13 +130,13 @@ void setup()
 //    int16_t ret = sensors[j].startMeasurePressureOnce(prs_mr, prs_osr);
     sensors[j].correctTemp();
     int ret = sensors[j].measurePressureOnce(pressure[j],0);
-    Serial.print("sensor \t");
-    Serial.print(j);
+    SerialUSB.print("sensor \t");
+    SerialUSB.print(j);
     if (ret != 0){
-      Serial.print("\tInit FAILED! ret = ");
-      Serial.println(ret);
+      SerialUSB.print("\tInit FAILED! ret = ");
+      SerialUSB.println(ret);
     }else{
-      Serial.println("\tInit complete!\t");
+      SerialUSB.println("\tInit complete!\t");
     }
 
     j++;
@@ -143,13 +144,13 @@ void setup()
 //    ret = sensors[j].startMeasurePressureCont(prs_mr, prs_osr);
     sensors[j].correctTemp();
     ret = sensors[j].measurePressureOnce(pressure[j],0);
-    Serial.print("sensor \t");
-    Serial.print(j);
+    SerialUSB.print("sensor \t");
+    SerialUSB.print(j);
     if (ret != 0){
-      Serial.print("\tInit FAILED! ret = ");
-      Serial.println(ret);
+      SerialUSB.print("\tInit FAILED! ret = ");
+      SerialUSB.println(ret);
     }else{
-      Serial.println("\tInit complete!\t");
+      SerialUSB.println("\tInit complete!\t");
     }
     j++;
   }
@@ -175,7 +176,7 @@ void setup()
   }while((t1-t0)<3000);
   for(int sensor = 0; sensor<8; sensor++){
     pressure_mean[sensor] /= (float)samples;
-    Serial.println(pressure_mean[sensor]);
+    SerialUSB.println(pressure_mean[sensor]);
   }
   delay(500);
   Control_Surface.begin(); // Initialize Control Surface
